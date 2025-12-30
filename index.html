@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call of Duty: Tactical Ops Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'cod-green': '#0f0',
+                        'cod-dark': '#0a0a0a',
+                        'cod-gray': '#1a1a1a',
+                        'cod-amber': '#ffb000',
+                        'cod-red': '#ff3333'
+                    },
+                    fontFamily: {
+                        'mono': ['"Share Tech Mono"', 'monospace'],
+                    },
+                    animation: {
+                        'scan': 'scan 4s linear infinite',
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glitch': 'glitch 1s linear infinite',
+                    },
+                    keyframes: {
+                        scan: {
+                            '0%': { transform: 'translateY(-100%)' },
+                            '100%': { transform: 'translateY(100%)' }
+                        },
+                        glitch: {
+                            '2%, 64%': { transform: 'translate(2px,0) skew(0deg)' },
+                            '4%, 60%': { transform: 'translate(-2px,0) skew(0deg)' },
+                            '62%': { transform: 'translate(0,0) skew(5deg)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #ccc;
+            background-image: 
+                linear-gradient(rgba(10, 20, 10, 0.9), rgba(10, 20, 10, 0.9)),
+                repeating-linear-gradient(0deg, transparent, transparent 1px, #112211 1px, #112211 2px);
+            background-size: 100% 100%, 100% 4px;
+        }
+        
+        /* CRT Scanline Effect */
+        .crt::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+
+        .hud-border {
+            border: 1px solid #333;
+            position: relative;
+        }
+        .hud-border::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 10px;
+            height: 10px;
+            border-bottom: 2px solid #0f0;
+            border-right: 2px solid #0f0;
+        }
+        .hud-border::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            width: 10px;
+            height: 10px;
+            border-top: 2px solid #0f0;
+            border-left: 2px solid #0f0;
+        }
+
+        .active-tab {
+            background-color: rgba(0, 255, 0, 0.1);
+            border-bottom: 2px solid #0f0;
+            color: #0f0;
+            text-shadow: 0 0 5px #0f0;
+        }
+
+        .inactive-tab {
+            border-bottom: 2px solid #333;
+            color: #555;
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+        }
+        
+        .amber-glow {
+            text-shadow: 0 0 5px rgba(255, 176, 0, 0.7);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border: 1px solid #0f0;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0f0;
+        }
+    </style>
+</head>
+<body class="font-mono h-screen w-full overflow-hidden flex flex-col relative crt select-none">
+
+    <!-- Header / HUD Top -->
+    <header class="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-cod-dark z-10">
+        <div class="flex items-center gap-4">
+            <i class="fas fa-crosshairs text-cod-green text-xl animate-pulse-fast"></i>
+            <div>
+                <h1 class="text-xl font-bold tracking-widest text-white uppercase glow-text">Task Force 141</h1>
+                <div class="text-xs text-cod-green opacity-70">OPERATIONAL DASHBOARD // <span id="clock">00:00:00</span></div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right hidden md:block">
+                <div class="text-xs text-cod-amber uppercase">Rank</div>
+                <div class="text-white font-bold" id="rank-display">PRIVATE</div>
+            </div>
+            <div class="h-10 w-10 border border-cod-amber flex items-center justify-center bg-yellow-900/20">
+                <i class="fas fa-medal text-cod-amber"></i>
+            </div>
+            <button onclick="toggleSettings()" class="hover:text-cod-green transition-colors">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col max-w-5xl mx-auto w-full p-4 relative z-10">
+        
+        <!-- Navigation Tabs -->
+        <div class="flex mb-6 uppercase tracking-wider text-sm font-bold">
+            <button onclick="switchTab('objectives')" id="tab-btn-objectives" class="flex-1 py-3 text-center transition-all duration-300 active-tab flex items-center justify-center gap-2">
+                <i class="fas fa-list"></i> Mission Objectives
+            </button>
+            <button onclick="switchTab('deployment')" id="tab-btn-deployment" class="flex-1 py-3 text-center transition-all duration-300 inactive-tab flex items-center justify-center gap-2">
+                <i class="fas fa-stopwatch"></i> Deployment
+            </button>
+        </div>
+
+        <!-- Objectives Tab (Todos) -->
+        <div id="tab-objectives" class="flex-1 flex flex-col overflow-hidden animate-fade-in">
+            <div class="hud-border bg-cod-dark/80 p-4 mb-4 flex gap-2">
+                <input type="text" id="new-mission-input" placeholder="ENTER NEW DIRECTIVE..." 
+                    class="flex-1 bg-transparent border-b border-gray-700 text-cod-green focus:outline-none focus:border-cod-green px-2 py-1 uppercase placeholder-gray-600">
+                <button onclick="addMission()" class="bg-cod-gray border border-cod-green text-cod-green px-6 py-1 hover:bg-cod-green hover:text-black transition-colors uppercase font-bold text-sm tracking-widest">
+                    Add Intel
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto pr-2 space-y-2" id="mission-list">
+                <!-- Mission Items injected via JS -->
+            </div>
+            
+            <div class="mt-4 flex justify-between items-center text-xs text-gray-500 uppercase">
+                <span>Active Missions: <span id="mission-count" class="text-white">0</span></span>
+                <button onclick="syncData()" id="sync-btn" class="flex items-center gap-2 hover:text-cod-green">
+                    <i class="fas fa-satellite-dish"></i> <span id="sync-status">UPLINK OFFLINE</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Deployment Tab (Pomodoro) -->
+        <div id="tab-deployment" class="hidden flex-1 flex flex-col items-center justify-center relative">
+            
+            <!-- Target visual -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
+                <div class="w-96 h-96 border border-cod-green rounded-full flex items-center justify-center">
+                    <div class="w-80 h-80 border border-dashed border-cod-green rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="bg-black/50 border border-gray-700 p-8 w-full max-w-md backdrop-blur-sm hud-border text-center z-10">
+                <h2 class="text-cod-amber text-sm uppercase tracking-[0.2em] mb-2">Current Operation</h2>
+                <div id="active-task-display" class="text-white text-xl mb-8 min-h-[1.75rem] truncate">NO ACTIVE TARGET</div>
+
+                <div class="relative mb-8">
+                    <div class="text-7xl font-bold text-cod-green glow-text tracking-widest" id="timer-display">25:00</div>
+                    <div class="absolute -right-4 -top-2 text-xs text-cod-green vertical-text opacity-50">MK-2 TIMER</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <button onclick="startTimer()" id="start-btn" class="bg-cod-green/20 border border-cod-green text-cod-green py-3 hover:bg-cod-green hover:text-black transition-all uppercase font-bold tracking-wider">
+                        Engage
+                    </button>
+                    <button onclick="resetTimer()" class="bg-red-900/20 border border-red-500 text-red-500 py-3 hover:bg-red-500 hover:text-black transition-all uppercase font-bold tracking-wider">
+                        Abort
+                    </button>
+                </div>
+
+                <div class="flex justify-center gap-4 text-xs uppercase text-gray-400">
+                    <button onclick="setTimerMode('pomodoro')" class="hover:text-white border-b border-transparent hover:border-white pb-1">Combat (25m)</button>
+                    <button onclick="setTimerMode('short')" class="hover:text-white border-b border-transparent hover:border-white pb-1">Reload (5m)</button>
+                    <button onclick="setTimerMode('long')" class="hover:text-white border-b border-transparent hover:border-white pb-1">R&R (15m)</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-cod-green p-6 w-full max-w-lg hud-border relative">
+            <button onclick="toggleSettings()" class="absolute top-2 right-2 text-gray-500 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2 class="text-xl text-white mb-4 uppercase tracking-wider border-b border-gray-700 pb-2">Comms Uplink Settings</h2>
+            
+            <p class="text-gray-400 text-sm mb-4 font-sans">
+                To enable Google Sheets Sync, create a Google App Script as a Web App and paste the URL below.
+            </p>
+
+            <label class="block text-cod-green text-xs uppercase mb-1">Google App Script Web App URL</label>
+            <input type="text" id="api-url" class="w-full bg-black border border-gray-600 p-2 text-white focus:border-cod-green focus:outline-none mb-4 font-mono text-sm" placeholder="https://script.google.com/macros/s/...">
+
+            <div class="flex justify-end gap-2">
+                <button onclick="saveSettings()" class="bg-cod-green text-black px-4 py-2 uppercase font-bold text-sm hover:bg-white transition-colors">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio (Hidden) -->
+    <audio id="sfx-click" src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU..." ></audio>
+
+    <script>
+        // --- State Management ---
+        let appState = {
+            missions: [],
+            rankXP: 0,
+            timer: {
+                timeLeft: 1500, // 25 min in seconds
+                isActive: false,
+                mode: 'pomodoro', // pomodoro, short, long
+                activeMissionId: null
+            },
+            settings: {
+                apiUrl: ''
+            }
+        };
+
+        let timerInterval = null;
+
+        // --- Init ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            updateClock();
+            setInterval(updateClock, 1000);
+            renderMissions();
+            updateRank();
+        });
+
+        // --- Clock ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('en-US', { hour12: false });
+        }
+
+        // --- Tabs ---
+        function switchTab(tabName) {
+            // UI Update
+            document.querySelectorAll('[id^="tab-btn-"]').forEach(btn => {
+                btn.classList.remove('active-tab');
+                btn.classList.add('inactive-tab');
+            });
+            document.getElementById(`tab-btn-${tabName}`).classList.add('active-tab');
+            document.getElementById(`tab-btn-${tabName}`).classList.remove('inactive-tab');
+
+            // Content Update
+            document.getElementById('tab-objectives').classList.add('hidden');
+            document.getElementById('tab-deployment').classList.add('hidden');
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        }
+
+        // --- Missions (Todo) Logic ---
+        function addMission() {
+            const input = document.getElementById('new-mission-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const mission = {
+                id: Date.now(),
+                text: text,
+                completed: false,
+                timeSpent: 0 // in seconds
+            };
+
+            appState.missions.unshift(mission);
+            input.value = '';
+            renderMissions();
+            saveData();
+        }
+
+        function toggleMission(id) {
+            const mission = appState.missions.find(m => m.id === id);
+            if (mission) {
+                mission.completed = !mission.completed;
+                if(mission.completed) appState.rankXP += 100;
+                else appState.rankXP -= 100;
+                
+                renderMissions();
+                updateRank();
+                saveData();
+            }
+        }
+
+        function deleteMission(id) {
+            appState.missions = appState.missions.filter(m => m.id !== id);
+            if(appState.timer.activeMissionId === id) {
+                appState.timer.activeMissionId = null;
+                document.getElementById('active-task-display').innerText = "NO ACTIVE TARGET";
+            }
+            renderMissions();
+            saveData();
+        }
+
+        function trackMission(id) {
+            const mission = appState.missions.find(m => m.id === id);
+            if(mission) {
+                appState.timer.activeMissionId = id;
+                document.getElementById('active-task-display').innerText = mission.text;
+                switchTab('deployment');
+            }
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function renderMissions() {
+            const list = document.getElementById('mission-list');
+            list.innerHTML = '';
+            
+            appState.missions.forEach(m => {
+                const isTracking = appState.timer.activeMissionId === m.id;
+                
+                const div = document.createElement('div');
+                div.className = `p-3 border-l-4 ${m.completed ? 'border-gray-600 bg-gray-900/50 opacity-50' : 'border-cod-amber bg-black/40'} ${isTracking ? 'ring-1 ring-cod-green' : ''} flex items-center justify-between group hover:bg-gray-900 transition-colors`;
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-3 flex-1">
+                        <button onclick="toggleMission(${m.id})" class="text-xl ${m.completed ? 'text-cod-green' : 'text-gray-600 hover:text-white'}">
+                            <i class="${m.completed ? 'fas fa-check-square' : 'far fa-square'}"></i>
+                        </button>
+                        <div class="flex flex-col">
+                            <span class="${m.completed ? 'line-through text-gray-500' : 'text-gray-200'} font-bold tracking-wide uppercase">${m.text}</span>
+                            <span class="text-xs text-cod-amber font-mono"><i class="fas fa-history"></i> TIME ON TARGET: ${formatTime(m.timeSpent)}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="trackMission(${m.id})" title="Deploy to this mission" class="text-cod-green hover:bg-cod-green hover:text-black p-1 rounded">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                        <button onclick="deleteMission(${m.id})" class="text-cod-red hover:bg-cod-red hover:text-white p-1 rounded">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            document.getElementById('mission-count').innerText = appState.missions.filter(m => !m.completed).length;
+        }
+
+        // --- Rank Logic ---
+        function updateRank() {
+            const xp = appState.rankXP;
+            let rank = "PRIVATE";
+            if (xp > 500) rank = "CORPORAL";
+            if (xp > 1500) rank = "SERGEANT";
+            if (xp > 3000) rank = "LIEUTENANT";
+            if (xp > 5000) rank = "CAPTAIN";
+            if (xp > 10000) rank = "COMMANDER";
+            
+            document.getElementById('rank-display').innerText = rank;
+        }
+
+        // --- Timer Logic ---
+        function setTimerMode(mode) {
+            appState.timer.mode = mode;
+            appState.timer.isActive = false;
+            clearInterval(timerInterval);
+            document.getElementById('start-btn').innerText = "ENGAGE";
+            
+            if(mode === 'pomodoro') appState.timer.timeLeft = 25 * 60;
+            if(mode === 'short') appState.timer.timeLeft = 5 * 60;
+            if(mode === 'long') appState.timer.timeLeft = 15 * 60;
+
+            updateTimerDisplay();
+        }
+
+        function updateTimerDisplay() {
+            const display = document.getElementById('timer-display');
+            display.innerText = formatTime(appState.timer.timeLeft);
+        }
+
+        function startTimer() {
+            const btn = document.getElementById('start-btn');
+            
+            if(appState.timer.isActive) {
+                // Pause
+                clearInterval(timerInterval);
+                appState.timer.isActive = false;
+                btn.innerText = "ENGAGE";
+            } else {
+                // Start
+                appState.timer.isActive = true;
+                btn.innerText = "HOLD FIRE"; // Pause text
+                
+                timerInterval = setInterval(() => {
+                    if(appState.timer.timeLeft > 0) {
+                        appState.timer.timeLeft--;
+                        updateTimerDisplay();
+                        
+                        // Add time to active mission
+                        if(appState.timer.activeMissionId && appState.timer.mode === 'pomodoro') {
+                            const mission = appState.missions.find(m => m.id === appState.timer.activeMissionId);
+                            if(mission) {
+                                mission.timeSpent++;
+                            }
+                        }
+                        
+                        // Save periodically to prevent data loss
+                        if(appState.timer.timeLeft % 30 === 0) {
+                            renderMissions(); // Update displayed time
+                            saveData();
+                        }
+
+                    } else {
+                        completeTimer();
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            appState.timer.isActive = false;
+            setTimerMode(appState.timer.mode); // Resets time based on current mode
+        }
+
+        function completeTimer() {
+            clearInterval(timerInterval);
+            appState.timer.isActive = false;
+            document.getElementById('start-btn').innerText = "ENGAGE";
+            
+            // Visual feedback
+            const display = document.getElementById('timer-display');
+            display.classList.add('text-white');
+            setTimeout(() => display.classList.remove('text-white'), 500);
+
+            if(appState.timer.mode === 'pomodoro') {
+                appState.rankXP += 250;
+                updateRank();
+            }
+            
+            renderMissions();
+            saveData();
+            // Could add simple beep here using AudioContext if desired
+            alert("OBJECTIVE COMPLETE. RTB FOR DEBRIEF.");
+        }
+
+        // --- Persistence & Sync ---
+        function saveData() {
+            localStorage.setItem('cod_ops_data', JSON.stringify(appState));
+        }
+
+        function loadData() {
+            const data = localStorage.getItem('cod_ops_data');
+            if(data) {
+                const parsed = JSON.parse(data);
+                appState.missions = parsed.missions || [];
+                appState.rankXP = parsed.rankXP || 0;
+                appState.settings = parsed.settings || { apiUrl: '' };
+                // Don't load timer state exactly, reset it for fresh session
+            }
+            if(appState.settings.apiUrl) {
+                document.getElementById('api-url').value = appState.settings.apiUrl;
+            }
+        }
+
+        // --- Settings Modal ---
+        function toggleSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function saveSettings() {
+            const url = document.getElementById('api-url').value.trim();
+            appState.settings.apiUrl = url;
+            saveData();
+            toggleSettings();
+            syncData(); // Try syncing immediately
+        }
+
+        // --- Google Sheets Sync Logic ---
+        async function syncData() {
+            const statusEl = document.getElementById('sync-status');
+            const iconEl = document.querySelector('.fa-satellite-dish');
+
+            if(!appState.settings.apiUrl) {
+                statusEl.innerText = "NO UPLINK";
+                statusEl.classList.add('text-cod-red');
+                return;
+            }
+
+            statusEl.innerText = "TRANSMITTING...";
+            statusEl.classList.remove('text-cod-red', 'text-cod-green');
+            statusEl.classList.add('text-cod-amber');
+            iconEl.classList.add('animate-spin');
+
+            try {
+                // We send a POST request with text/plain to avoid CORS preflight issues with simple Apps Scripts
+                const payload = JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    missions: appState.missions,
+                    xp: appState.rankXP
+                });
+
+                await fetch(appState.settings.apiUrl, {
+                    method: 'POST',
+                    mode: 'no-cors', // Important for Google Apps Script Web App
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: payload
+                });
+
+                // Since mode is no-cors, we can't read the response, so we assume success if no error thrown
+                statusEl.innerText = "UPLINK SECURE";
+                statusEl.classList.remove('text-cod-amber');
+                statusEl.classList.add('text-cod-green');
+                setTimeout(() => statusEl.innerText = "ONLINE", 2000);
+
+            } catch (e) {
+                console.error(e);
+                statusEl.innerText = "TRANSMISSION FAILED";
+                statusEl.classList.add('text-cod-red');
+            } finally {
+                iconEl.classList.remove('animate-spin');
+            }
+        }
+    </script>
+</body>
+</html>
