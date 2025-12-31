@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPA Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* Custom scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        .semester-card {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .grade-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1em;
+        }
+    </style>
+</head>
+<body class="text-slate-800 pb-24">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-graduation-cap text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-tight">GPA Calculator</h1>
+            </div>
+            <button onclick="resetAll()" class="text-xs bg-indigo-500 hover:bg-indigo-400 text-white py-1.5 px-3 rounded transition">
+                Reset All
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8" id="app-container">
+        
+        <!-- Instructions / Welcome -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-indigo-500">
+            <h2 class="text-lg font-semibold mb-2 text-indigo-900">How to use</h2>
+            <p class="text-slate-600 text-sm">
+                Add your semesters and courses below. Select the grade based on your percentage range. 
+                Your SGPA (Semester GPA) and CGPA (Cumulative GPA) will calculate automatically.
+            </p>
+        </div>
+
+        <!-- Container where Semesters will be added -->
+        <div id="semesters-list" class="space-y-6">
+            <!-- Semesters are injected here via JS -->
+        </div>
+
+        <!-- Add Semester Button -->
+        <div class="mt-8 flex justify-center">
+            <button onclick="addSemester()" class="group flex items-center gap-2 bg-white border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:text-indigo-700 font-semibold py-4 px-8 rounded-xl w-full justify-center transition-all shadow-sm hover:shadow-md">
+                <i class="fa-solid fa-plus group-hover:scale-110 transition-transform"></i>
+                Add Another Semester
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Sticky Footer for CGPA -->
+    <footer class="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex flex-col">
+                <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Credits</span>
+                <span class="text-xl font-bold text-slate-800" id="total-credits-display">0</span>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Cumulative GPA (CGPA)</span>
+                <span class="text-3xl font-bold text-indigo-600" id="cgpa-display">0.00</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // Grade Scale Configuration
+        const gradeScale = [
+            { label: "A+", range: "≥ 96%", points: 4.0 },
+            { label: "A", range: "92% - 96%", points: 3.7 },
+            { label: "A-", range: "88% - 92%", points: 3.4 },
+            { label: "B+", range: "84% - 88%", points: 3.2 },
+            { label: "B", range: "80% - 84%", points: 3.0 },
+            { label: "B-", range: "76% - 80%", points: 2.8 },
+            { label: "C+", range: "72% - 76%", points: 2.6 },
+            { label: "C", range: "68% - 72%", points: 2.4 },
+            { label: "C-", range: "64% - 68%", points: 2.2 },
+            { label: "D+", range: "60% - 64%", points: 2.0 },
+            { label: "D", range: "55% - 60%", points: 1.5 },
+            { label: "D-", range: "50% - 55%", points: 1.0 },
+            { label: "F", range: "< 50%", points: 0.0 }
+        ];
+
+        let semesterCount = 0;
+
+        // Initialize with one semester
+        document.addEventListener('DOMContentLoaded', () => {
+            addSemester();
+        });
+
+        function createGradeOptions() {
+            let options = `<option value="" disabled selected>Select Grade</option>`;
+            gradeScale.forEach(grade => {
+                options += `<option value="${grade.points}">${grade.label} (${grade.range}) - ${grade.points}</option>`;
+            });
+            return options;
+        }
+
+        function addSemester() {
+            semesterCount++;
+            const container = document.getElementById('semesters-list');
+            const semesterId = `semester-${Date.now()}`;
+            
+            const semesterHTML = `
+                <div id="${semesterId}" class="semester-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg">Semester ${semesterCount}</h3>
+                            <div class="text-sm text-slate-500 mt-1">
+                                SGPA: <span class="font-bold text-indigo-600 semester-sgpa">0.00</span> 
+                                <span class="mx-2">•</span> 
+                                Credits: <span class="font-bold text-slate-700 semester-credits">0</span>
+                            </div>
+                        </div>
+                        <button onclick="removeSemester('${semesterId}')" class="text-red-500 hover:text-red-700 text-sm font-medium flex items-center gap-1 transition-colors">
+                            <i class="fa-regular fa-trash-can"></i> Remove Semester
+                        </button>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="grid grid-cols-12 gap-4 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
+                            <div class="col-span-5 sm:col-span-6">Course Name</div>
+                            <div class="col-span-3 sm:col-span-2 text-center">Credits</div>
+                            <div class="col-span-4 sm:col-span-4">Grade</div>
+                        </div>
+                        
+                        <div class="courses-container space-y-3">
+                            <!-- Courses go here -->
+                        </div>
+
+                        <button onclick="addCourse('${semesterId}')" class="mt-4 text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-2 transition-colors">
+                            <i class="fa-solid fa-plus-circle"></i> Add Course
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Insert HTML
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = semesterHTML;
+            container.appendChild(wrapper.firstElementChild);
+
+            // Add 4 default courses
+            for(let i=0; i<4; i++) {
+                addCourse(semesterId);
+            }
+        }
+
+        function addCourse(semesterId) {
+            const semesterEl = document.getElementById(semesterId);
+            const coursesContainer = semesterEl.querySelector('.courses-container');
+            const courseId = `course-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+            const courseHTML = `
+                <div id="${courseId}" class="course-row grid grid-cols-12 gap-2 sm:gap-4 items-center bg-slate-50 p-2 rounded-lg border border-transparent hover:border-slate-200 transition-colors group">
+                    <div class="col-span-5 sm:col-span-6">
+                        <input type="text" placeholder="Course Name" class="w-full bg-transparent border-none focus:ring-0 text-slate-700 placeholder-slate-400 text-sm font-medium p-0" />
+                    </div>
+                    <div class="col-span-3 sm:col-span-2">
+                        <input type="number" min="0" max="20" placeholder="3" oninput="calculate()" class="course-credits w-full text-center bg-white border border-slate-200 rounded-md py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" />
+                    </div>
+                    <div class="col-span-4 sm:col-span-4 flex items-center gap-2">
+                        <select onchange="calculate()" class="course-grade grade-select w-full bg-white border border-slate-200 rounded-md py-1.5 pl-2 pr-8 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow cursor-pointer">
+                            ${createGradeOptions()}
+                        </select>
+                        <button onclick="removeCourse('${courseId}')" class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all w-6 h-6 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = courseHTML;
+            coursesContainer.appendChild(wrapper.firstElementChild);
+        }
+
+        function removeCourse(courseId) {
+            const courseEl = document.getElementById(courseId);
+            if (courseEl) {
+                // If it's the last course, clear inputs instead of removing to keep UI clean? 
+                // No, user can add more.
+                courseEl.remove();
+                calculate();
+            }
+        }
+
+        function removeSemester(semesterId) {
+            const semesterEl = document.getElementById(semesterId);
+            if (semesterEl) {
+                // Confirm if data entered? Optional. simpler to just delete.
+                if(document.getElementById('semesters-list').children.length > 1) {
+                   semesterEl.remove();
+                   calculate();
+                } else {
+                    // If it's the last semester, just reset it
+                    const courses = semesterEl.querySelectorAll('.course-row');
+                    courses.forEach(c => c.remove());
+                    // Add back default 4
+                    for(let i=0; i<4; i++) addCourse(semesterId);
+                    calculate();
+                }
+            }
+        }
+
+        function resetAll() {
+            if(confirm("Are you sure you want to clear all data?")) {
+                document.getElementById('semesters-list').innerHTML = '';
+                semesterCount = 0;
+                addSemester();
+                calculate();
+            }
+        }
+
+        function calculate() {
+            let totalCreditsGlobal = 0;
+            let totalPointsGlobal = 0;
+
+            const semesters = document.querySelectorAll('.semester-card');
+
+            semesters.forEach(semester => {
+                let semesterCredits = 0;
+                let semesterPoints = 0;
+                
+                const courses = semester.querySelectorAll('.course-row');
+
+                courses.forEach(course => {
+                    const creditsInput = course.querySelector('.course-credits');
+                    const gradeSelect = course.querySelector('.course-grade');
+                    
+                    const credits = parseFloat(creditsInput.value);
+                    const gradePoint = parseFloat(gradeSelect.value);
+
+                    // Only calculate if both inputs are valid numbers
+                    if (!isNaN(credits) && !isNaN(gradePoint)) {
+                        semesterCredits += credits;
+                        semesterPoints += (credits * gradePoint);
+                    }
+                });
+
+                // Calculate SGPA
+                const sgpa = semesterCredits > 0 ? (semesterPoints / semesterCredits).toFixed(2) : "0.00";
+                
+                // Update Semester UI
+                semester.querySelector('.semester-sgpa').textContent = sgpa;
+                semester.querySelector('.semester-credits').textContent = semesterCredits;
+
+                // Add to Global
+                totalCreditsGlobal += semesterCredits;
+                totalPointsGlobal += semesterPoints;
+            });
+
+            // Calculate CGPA
+            const cgpa = totalCreditsGlobal > 0 ? (totalPointsGlobal / totalCreditsGlobal).toFixed(2) : "0.00";
+
+            // Update Footer UI
+            document.getElementById('total-credits-display').textContent = totalCreditsGlobal;
+            document.getElementById('cgpa-display').textContent = cgpa;
+        }
+
+    </script>
+</body>
+</html>
