@@ -42,7 +42,7 @@
         }
     </style>
 </head>
-<body class="text-slate-800 pb-24">
+<body class="text-slate-800 pb-32">
 
     <!-- Header -->
     <header class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50">
@@ -64,8 +64,9 @@
         <div class="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-indigo-500">
             <h2 class="text-lg font-semibold mb-2 text-indigo-900">How to use</h2>
             <p class="text-slate-600 text-sm">
-                Add your semesters and courses below. Select the grade based on your percentage range. 
-                Your SGPA (Semester GPA) and CGPA (Cumulative GPA) will calculate automatically.
+                Add your semesters and courses below. 
+                <strong>Ensure Credit Hours are correct</strong> (default is 3).
+                Your SGPA and CGPA update automatically.
             </p>
         </div>
 
@@ -86,12 +87,19 @@
 
     <!-- Sticky Footer for CGPA -->
     <footer class="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
-        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex flex-col">
-                <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Credits</span>
-                <span class="text-xl font-bold text-slate-800" id="total-credits-display">0</span>
+        <div class="max-w-4xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
+            <div class="flex gap-8 text-center sm:text-left">
+                <div class="flex flex-col">
+                    <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Credits</span>
+                    <span class="text-xl font-bold text-slate-800" id="total-credits-display">0</span>
+                </div>
+                <div class="flex flex-col border-l pl-8 border-slate-200">
+                    <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Courses Counted</span>
+                    <span class="text-xl font-bold text-slate-800" id="total-courses-display">0</span>
+                </div>
             </div>
-            <div class="flex flex-col items-end">
+            
+            <div class="flex flex-col items-center sm:items-end">
                 <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">Cumulative GPA (CGPA)</span>
                 <span class="text-3xl font-bold text-indigo-600" id="cgpa-display">0.00</span>
             </div>
@@ -187,13 +195,14 @@
             const coursesContainer = semesterEl.querySelector('.courses-container');
             const courseId = `course-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+            // Note: Added value="3" to credit input to prevent NaN errors if user skips typing
             const courseHTML = `
                 <div id="${courseId}" class="course-row grid grid-cols-12 gap-2 sm:gap-4 items-center bg-slate-50 p-2 rounded-lg border border-transparent hover:border-slate-200 transition-colors group">
                     <div class="col-span-5 sm:col-span-6">
                         <input type="text" placeholder="Course Name" class="w-full bg-transparent border-none focus:ring-0 text-slate-700 placeholder-slate-400 text-sm font-medium p-0" />
                     </div>
                     <div class="col-span-3 sm:col-span-2">
-                        <input type="number" min="0" max="20" placeholder="3" oninput="calculate()" class="course-credits w-full text-center bg-white border border-slate-200 rounded-md py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" />
+                        <input type="number" min="0" max="20" value="3" oninput="calculate()" class="course-credits w-full text-center bg-white border border-slate-200 rounded-md py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" />
                     </div>
                     <div class="col-span-4 sm:col-span-4 flex items-center gap-2">
                         <select onchange="calculate()" class="course-grade grade-select w-full bg-white border border-slate-200 rounded-md py-1.5 pl-2 pr-8 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow cursor-pointer">
@@ -209,13 +218,12 @@
             const wrapper = document.createElement('div');
             wrapper.innerHTML = courseHTML;
             coursesContainer.appendChild(wrapper.firstElementChild);
+            calculate(); // Recalculate immediately to account for default credits
         }
 
         function removeCourse(courseId) {
             const courseEl = document.getElementById(courseId);
             if (courseEl) {
-                // If it's the last course, clear inputs instead of removing to keep UI clean? 
-                // No, user can add more.
                 courseEl.remove();
                 calculate();
             }
@@ -224,15 +232,12 @@
         function removeSemester(semesterId) {
             const semesterEl = document.getElementById(semesterId);
             if (semesterEl) {
-                // Confirm if data entered? Optional. simpler to just delete.
                 if(document.getElementById('semesters-list').children.length > 1) {
                    semesterEl.remove();
                    calculate();
                 } else {
-                    // If it's the last semester, just reset it
                     const courses = semesterEl.querySelectorAll('.course-row');
                     courses.forEach(c => c.remove());
-                    // Add back default 4
                     for(let i=0; i<4; i++) addCourse(semesterId);
                     calculate();
                 }
@@ -251,6 +256,7 @@
         function calculate() {
             let totalCreditsGlobal = 0;
             let totalPointsGlobal = 0;
+            let totalCoursesCounted = 0;
 
             const semesters = document.querySelectorAll('.semester-card');
 
@@ -271,6 +277,17 @@
                     if (!isNaN(credits) && !isNaN(gradePoint)) {
                         semesterCredits += credits;
                         semesterPoints += (credits * gradePoint);
+                        totalCoursesCounted++;
+                        
+                        // Visual feedback for included courses
+                        course.classList.remove('opacity-50');
+                        course.classList.add('border-slate-200', 'bg-white');
+                        course.classList.remove('bg-slate-50', 'border-transparent');
+                    } else {
+                         // Visual feedback for excluded/empty courses
+                        course.classList.add('opacity-50');
+                        course.classList.remove('border-slate-200', 'bg-white');
+                        course.classList.add('bg-slate-50', 'border-transparent');
                     }
                 });
 
@@ -291,6 +308,7 @@
 
             // Update Footer UI
             document.getElementById('total-credits-display').textContent = totalCreditsGlobal;
+            document.getElementById('total-courses-display').textContent = totalCoursesCounted;
             document.getElementById('cgpa-display').textContent = cgpa;
         }
 
